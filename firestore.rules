@@ -1,0 +1,54 @@
+rules_version = '2';
+
+// 이 파일은 참고용입니다.
+// 실제 적용은 Firebase 콘솔 > Firestore Database > 규칙 탭에 이 내용을 붙여넣어야 합니다.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    // users/{uid} 문서의 role 필드로 교사 여부를 확인합니다.
+    // 문서가 없으면(=역할이 없으면) 교사가 아닌 것으로 취급합니다.
+    function isTeacher() {
+      return isSignedIn()
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == "teacher";
+    }
+
+    // --- 사용자 역할 문서 ---
+    match /users/{userId} {
+      // 본인 역할만 읽을 수 있습니다.
+      allow read: if isSignedIn() && request.auth.uid == userId;
+
+      // 최초 1회, 본인 uid로, role이 "student"일 때만 스스로 만들 수 있습니다.
+      // "teacher"로 셀프 승격하는 것은 여기서 막습니다.
+      // 교사 권한은 콘솔에서 관리자가 role 필드를 "teacher"로 직접 바꿔줘야 합니다.
+      allow create: if isSignedIn()
+        && request.auth.uid == userId
+        && request.resource.data.role == "student";
+
+      // 역할 변경/삭제는 클라이언트에서 불가능합니다. (콘솔에서만 관리자가 수정)
+      allow update, delete: if false;
+    }
+
+    // --- 담벼락 메모 ---
+    match /memos/{memoId} {
+      // 담벼락은 로그인 없이도 볼 수 있습니다.
+      allow read: if true;
+
+      // 로그인한 사용자만, 본인 uid로만, 5글자 이상 텍스트로만 새 메모를 만들 수 있습니다.
+      allow create: if isSignedIn()
+        && request.resource.data.keys().hasOnly(["text", "uid", "createdAt"])
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.text is string
+        && request.resource.data.text.size() >= 5
+        && request.resource.data.createdAt == request.time;
+
+      // 수정/삭제는 교사만 할 수 있습니다.
+      // (학생은 자기 메모라도 고치거나 지울 수 없습니다. 요청하신 "생성만 허용" 규칙입니다.)
+      allow update, delete: if isTeacher();
+    }
+  }
+}
