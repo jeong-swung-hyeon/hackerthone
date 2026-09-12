@@ -22,6 +22,45 @@
 
 const MODEL = "gemini-flash-latest";
 
+// 무료 티어는 가끔 503(과부하)을 반환합니다. 잠깐 기다렸다가 한 번만 다시 불러봅니다.
+function wait(ms) {
+  return new Promise(function (resolve) {
+    setTimeout(resolve, ms);
+  });
+}
+
+async function callGemini(apiKey, prompt) {
+  const url =
+    "https://generativelanguage.googleapis.com/v1beta/models/" +
+    MODEL +
+    ":generateContent?key=" +
+    apiKey;
+
+  const body = JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] });
+
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    const geminiRes = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: body
+    });
+
+    const data = await geminiRes.json();
+
+    if (geminiRes.ok) {
+      return { ok: true, data: data };
+    }
+
+    // 503(일시적 과부하)이면 한 번 더 시도하고, 그 외 오류는 바로 실패 처리합니다.
+    if (geminiRes.status === 503 && attempt === 1) {
+      await wait(1000);
+      continue;
+    }
+
+    return { ok: false, data: data };
+  }
+}
+
 export default async function handler(req, res) {
   if (req.method !== "POST") {
     res.status(405).json({ error: "POST 요청만 받습니다." });
@@ -51,29 +90,15 @@ export default async function handler(req, res) {
     "메모: " + text;
 
   try {
-    const geminiRes = await fetch(
-      "https://generativelanguage.googleapis.com/v1beta/models/" +
-        MODEL +
-        ":generateContent?key=" +
-        apiKey,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: prompt }] }]
-        })
-      }
-    );
+    const result = await callGemini(apiKey, prompt);
 
-    const data = await geminiRes.json();
-
-    if (!geminiRes.ok) {
-      console.error("Gemini API 오류:", data);
-      // TODO: 원인 확인 후 detail 필드는 지울 것
-      res.status(502).json({ error: "AI 코멘트를 가져오지 못했습니다.", detail: data });
+    if (!result.ok) {
+      console.error("Gemini API 오류:", result.data);
+      res.status(502).json({ error: "AI 코멘트를 가져오지 못했습니다." });
       return;
     }
 
+    const data = result.data;
     const comment =
       data.candidates &&
       data.candidates[0] &&
@@ -83,15 +108,14 @@ export default async function handler(req, res) {
       data.candidates[0].content.parts[0].text;
 
     if (!comment) {
-      // TODO: 원인 확인 후 detail 필드는 지울 것
-      res.status(502).json({ error: "AI 코멘트를 가져오지 못했습니다.", detail: data });
+      console.error("Gemini 응답에 comment가 없음:", data);
+      res.status(502).json({ error: "AI 코멘트를 가져오지 못했습니다." });
       return;
     }
 
     res.status(200).json({ comment: comment.trim() });
   } catch (err) {
     console.error("Gemini 호출 실패:", err);
-    // TODO: 원인 확인 후 detail 필드는 지울 것
-    res.status(500).json({ error: "AI 코멘트를 가져오는 중 오류가 발생했습니다.", detail: String(err) });
+    res.status(500).json({ error: "AI 코멘트를 가져오는 중 오류가 발생했습니다." });
   }
 }
