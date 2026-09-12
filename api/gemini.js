@@ -69,7 +69,8 @@ export default async function handler(req, res) {
 
     if (!geminiRes.ok) {
       console.error("Gemini API 오류:", data);
-      res.status(502).json({ error: "AI 코멘트를 가져오지 못했습니다." });
+      // TODO: 원인 확인 후 detail 필드는 지울 것
+      res.status(502).json({ error: "AI 코멘트를 가져오지 못했습니다.", detail: data });
       return;
     }
 
@@ -82,13 +83,15 @@ export default async function handler(req, res) {
       data.candidates[0].content.parts[0].text;
 
     if (!comment) {
-      res.status(502).json({ error: "AI 코멘트를 가져오지 못했습니다." });
+      // TODO: 원인 확인 후 detail 필드는 지울 것
+      res.status(502).json({ error: "AI 코멘트를 가져오지 못했습니다.", detail: data });
       return;
     }
 
     res.status(200).json({ comment: comment.trim() });
   } catch (err) {
     console.error("Gemini 호출 실패:", err);
-    res.status(500).json({ error: "AI 코멘트를 가져오는 중 오류가 발생했습니다." });
+    // TODO: 원인 확인 후 detail 필드는 지울 것
+    res.status(500).json({ error: "AI 코멘트를 가져오는 중 오류가 발생했습니다.", detail: String(err) });
   }
 }
