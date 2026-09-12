@@ -14,7 +14,8 @@ import {
   doc,
   query,
   orderBy,
-  onSnapshot
+  onSnapshot,
+  serverTimestamp  // 서버 시각을 Firestore Timestamp로 저장하기 위해 필요합니다
 } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore.js";
 
 
@@ -61,7 +62,9 @@ async function addMemo(text) {
 
   await addDoc(collection(db, "memos"), {
     text: text,
-    createdAt: Date.now()
+    // serverTimestamp()를 써야 Firestore 보안 규칙의 timestamp 타입 검사를 통과합니다.
+    // Date.now()는 숫자(number)라서 규칙에서 막힙니다.
+    createdAt: serverTimestamp()
   });
 }
 
