@@ -14,6 +14,7 @@ import {
   doc,
   getDoc,
   setDoc,
+  updateDoc,
   query,
   orderBy,
   onSnapshot,
@@ -94,6 +95,26 @@ async function addMemo(text) {
 // 백엔드 2: 지금은 누구든 남의 메모를 지울 수 있습니다. 이걸 막는 것이 과제입니다.
 async function deleteMemo(id) {
   await deleteDoc(doc(db, "memos", id));
+}
+
+// 메모에 AI 코멘트를 답니다. (교사만 누를 수 있는 버튼에서 호출)
+// 개인정보 보호: 서버(api/gemini)에는 메모 내용(text)만 보내고,
+// uid·이메일 같은 식별 정보는 절대 함께 보내지 않습니다.
+async function addAiComment(memo) {
+  const res = await fetch("/api/gemini", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ text: memo.text })
+  });
+
+  const data = await res.json();
+
+  if (!res.ok || !data.comment) {
+    alert("AI 코멘트를 가져오지 못했습니다.");
+    return;
+  }
+
+  await updateDoc(doc(db, "memos", memo.id), { aiComment: data.comment });
 }
 
 
@@ -185,7 +206,7 @@ function makeMemo(memo) {
   const div = document.createElement("div");
   div.className = "memo";
 
-  // 삭제 버튼은 교사에게만 보여줍니다. (학생은 규칙상 삭제할 수 없습니다)
+  // 삭제 버튼, AI 코멘트 버튼은 교사에게만 보여줍니다. (학생은 규칙상 할 수 없습니다)
   if (currentUserRole === "teacher") {
     const del = document.createElement("button");
     del.textContent = "×";
@@ -193,11 +214,34 @@ function makeMemo(memo) {
       deleteMemo(memo.id);
     });
     div.appendChild(del);
+
+    const aiBtn = document.createElement("button");
+    aiBtn.textContent = "AI 코멘트";
+    aiBtn.addEventListener("click", function () {
+      aiBtn.disabled = true;
+      aiBtn.textContent = "생각 중...";
+      addAiComment(memo).catch(function (err) {
+        console.error(err);
+        alert("AI 코멘트를 가져오는 중 오류가 발생했습니다.");
+      }).finally(function () {
+        aiBtn.disabled = false;
+        aiBtn.textContent = "AI 코멘트";
+      });
+    });
+    div.appendChild(aiBtn);
   }
 
   const span = document.createElement("span");
   span.textContent = memo.text;
   div.appendChild(span);
+
+  // AI 코멘트가 달려 있으면 함께 보여줍니다.
+  if (memo.aiComment) {
+    const comment = document.createElement("div");
+    comment.className = "aiComment";
+    comment.textContent = "🤖 " + memo.aiComment;
+    div.appendChild(comment);
+  }
 
   return div;
 }
