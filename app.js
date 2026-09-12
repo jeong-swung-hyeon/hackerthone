@@ -56,6 +56,9 @@ function loadMemos() {
 // 메모를 새로 씁니다.
 // 백엔드 2: 여기에 "누가 썼는지"(uid)를 함께 저장하게 됩니다.
 async function addMemo(text) {
+  // 5글자 미만이면 Firestore에 저장하지 않습니다.
+  if (text.length < 5) return;
+
   await addDoc(collection(db, "memos"), {
     text: text,
     createdAt: Date.now()
@@ -109,6 +112,9 @@ function makeMemo(memo) {
 
 const input = document.getElementById("input");
 
+// 안내 메시지를 보여주는 요소
+const hint = document.getElementById("hint");
+
 input.addEventListener("keydown", function (e) {
   if (e.key === "Enter" && !e.shiftKey) {
     e.preventDefault();
@@ -116,6 +122,14 @@ input.addEventListener("keydown", function (e) {
     const text = input.value.trim();
     if (text === "") return;
 
+    // 5글자 미만이면 안내 메시지를 보여주고 저장하지 않습니다.
+    if (text.length < 5) {
+      hint.textContent = "✏️ 메모는 5글자 이상 써 주세요. (현재 " + text.length + "글자)";
+      return;
+    }
+
+    // 5글자 이상이면 안내 메시지를 지우고 저장합니다.
+    hint.textContent = "";
     addMemo(text);
     input.value = "";
   }
